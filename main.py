@@ -1,5 +1,6 @@
 import pygame
 pygame.init()
+import os
 
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 700
@@ -13,7 +14,7 @@ FPS = 60
 
 RED = (255, 0, 0)
 
-GRAVITY = 0.6
+GRAVITY = 0.75
 
 #определение действий игрока
 moving_left = False
@@ -30,20 +31,24 @@ class Hero(pygame.sprite.Sprite):
         self.direction = 1
         self.vel_y = 0
         self.jump = False
+        self.in_air = True
         self.flip = False
-        self.animation_list = [[] for _ in range(2)]  # Инициализация пустых списков
-        self.frame_index = 1
-        self.action = 0
+        self.animation_list = {}  # Инициализация пустого словаря
+        self.frame_index = 0
+        self.action = 'idle'  # Устанавливаем начальное действие
         self.update_time = pygame.time.get_ticks()
-        for i in range(1, 12):
-            img = pygame.image.load(f'img/{self.char_type}/idle/{i}.png')
-            image = pygame.transform.scale(img, (int(img.get_width() * scale), int(img.get_height() * scale)))
-            self.animation_list[0].append(image)  # Добавление изображений в список для действия "покой"
-
-        for i in range(1, 9):
-            img = pygame.image.load(f'img/{self.char_type}/run/{i}.png')
-            image = pygame.transform.scale(img, (int(img.get_width() * scale), int(img.get_height() * scale)))
-            self.animation_list[1].append(image)  # Добавление изображений в список для действия "бег"
+        #загрузить все анимации для игрока
+        animation_types = ['idle', 'run', 'jump', 'fall']
+        for animation in animation_types:
+            #сбросить временный список изображений
+            temp_list = []
+            #подсчитывает количество файлов в папке
+            num_of_frames = len(os.listdir(f'img/{self.char_type}/{animation}'))
+            for i in range(num_of_frames):
+                img = pygame.image.load(f'img/{self.char_type}/{animation}/{i+1}.png')
+                img = pygame.transform.scale(img, (int(img.get_width() * scale), int(img.get_height() * scale)))
+                temp_list.append(img)  # Добавление изображений в список для текущего действия
+            self.animation_list[animation] = temp_list
 
         self.image = self.animation_list[self.action][self.frame_index]
         self.rect = self.image.get_rect()
@@ -63,9 +68,10 @@ class Hero(pygame.sprite.Sprite):
             self.flip = False
             self.direction = 1
 
-        if self.jump:
+        if self.jump == True and self.in_air == False:
             self.vel_y = -11
             self.jump = False
+            self.in_air = True
 
         #добавление гравитации
         self.vel_y += GRAVITY
@@ -75,6 +81,7 @@ class Hero(pygame.sprite.Sprite):
 
         if self.rect.bottom + dy > 300:
             dy = 300 -self.rect.bottom
+            self.in_air = False
 
         #обновить положение прямоугольника
         self.rect.x += dx
@@ -132,13 +139,17 @@ while run:
                 moving_down = False
 
     if player.alive:
-        if moving_left or moving_right:
-            player.update_action(1)  # 1: run
+        if player.in_air:
+            player.update_action('jump')
+        elif moving_left or moving_right:
+            player.update_action('run')
         else:
-            player.update_action(0)  # 0: idle
+            player.update_action('idle')
 
-
-
+        if player.jump and player.vel_y == 0:
+            player.update_action('jump')
+        elif player.rect.bottom < 300:
+            player.update_action('fall')
 
         screen.fill((144, 201, 120))
         pygame.draw.line(screen, RED, (0, 300), (SCREEN_WIDTH, 300))
@@ -150,6 +161,14 @@ while run:
         clock.tick(FPS)
 
 pygame.quit()
+
+
+
+
+
+
+
+
 
 
 
