@@ -146,7 +146,8 @@ class World():
                     if tile >=0 and tile <= 21:
                         self.obstacle_list.append(tile_data) #препятствия
                     elif tile > 22:
-                        pass#украшение
+                        decoration = Decoration(img, x * TILE_SIZE, y * TILE_SIZE)
+                        decoration_group.add(decoration) #украшение
 
                     elif tile == 22:#create player
                         player = Hero('player', x * TILE_SIZE, y * TILE_SIZE, 5, 100)
@@ -157,6 +158,7 @@ class World():
                         diamond = Diamond('Diamond', x * TILE_SIZE, y * TILE_SIZE,...)
                     
                     """
+
         return player
 
     def draw(self):
@@ -166,8 +168,16 @@ class World():
         else:
             print("No tiles to draw")
 
+class Decoration(pygame.sprite.Sprite):
+    def __init__(self, item_tipe, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
 
 pig = Hero('player', 400, 200, 5, 100)
+
+decoration_group = pygame.sprite.Group()
 
 #создать пустой список плиток
 world_data = []
@@ -235,8 +245,10 @@ while run:
         world.draw()
         pygame.draw.line(screen, RED, (0, 300), (SCREEN_WIDTH, 300))
         player.update_animation()
+        decoration_group.update()
         player.draw()
         pig.draw()
+        decoration_group.draw(screen)
         player.move(moving_left, moving_right)
         pygame.display.update()
         clock.tick(FPS)
