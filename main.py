@@ -72,9 +72,11 @@ class Hero(pygame.sprite.Sprite):
         self.frame_index = 0
         self.action = 'idle'
         self.update_time = pygame.time.get_ticks()
+        self.last_hit_time = pygame.time.get_ticks()
         self.status = None
         self.image_index = 0
         self.facing_right = True
+        self.attack_rect = None
 
         animation_types = ['idle', 'run', 'jump', 'fall', 'attack', 'die']
         for animation in animation_types:
@@ -91,6 +93,22 @@ class Hero(pygame.sprite.Sprite):
         self.rect.center = (x, y)
         self.width = self.image.get_width()
         self.height = self.image.get_height()
+        self.terrain_collision_rect = pygame.Rect((self.rect.left + 24, self.rect.top), (50, self.rect.height))
+
+    def update(self):
+        self.update_animation()
+        self.check_alive()
+
+            # Проверка столкновения с игроком
+        if self.char_type == 'pig' and pygame.sprite.collide_rect(self, player):
+            if player.alive and pygame.time.get_ticks() - self.last_hit_time > 1000:  # Проверка прошедшего времени
+                player.health -= 1  # Теряется одна жизнь
+                print("Player health:", player.health)
+                if player.health <= 0:
+                    player.alive = False
+                    print("Player has died")
+                self.last_hit_time = pygame.time.get_ticks()
+
 
     def move(self, moving_left, moving_right):
         screen_scroll = 0
@@ -108,44 +126,15 @@ class Hero(pygame.sprite.Sprite):
             self.facing_right = True
 
         if self.jump == True and self.in_air == False:
-            self.vel_y = -11
+            self.vel_y = -9
             self.jump = False
             self.in_air = True
 
-        def update(self):
-            self.vel_y += GRAVITY
-            dx = self.direction * self.speed
-            dy = self.vel_y
-
-            # check for collision with level
-            for tile in world.obstacle_list:
-                # check collision with walls
-                if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
-                    self.direction *= -1
-                    dx = self.direction * self.speed
-                # check for collision in the y direction
-                if tile[1].colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
-                    self.speed = 0
-                    # check if below the ground, i.e. thrown up
-                    if self.vel_y < 0:
-                        self.vel_y = 0
-                        dy = tile[1].bottom - self.rect.top
-                    # check if above the ground, i.e. falling
-                    elif self.vel_y >= 0:
-                        self.vel_y = 0
-                        dy = tile[1].top - self.rect.bottom
-
+        # apply gravity
         self.vel_y += GRAVITY
+        if self.vel_y > 10:
+            self.vel_y
         dy += self.vel_y
-
-        def ai(self):
-            if self.alive and player.alive:
-                if self.direction == 1:
-                    ai_moving_right = True
-                else:
-                    ai_moving_left = False
-                ai_moving_left = not ai_moving_right
-                self.move(ai_moving_left, ai_moving_right)
 
         # проверка препятсвий
         for tile in world.obstacle_list:
@@ -168,11 +157,15 @@ class Hero(pygame.sprite.Sprite):
         self.rect.x += dx
         self.rect.y += dy
 
-    def attack(self) -> None:
-        self.status = "attack"
-        self.image_index = 0
-        left_shift = 49 if self.facing_right else -49
-        self.attack_rect = pygame.Rect((self.rect.left + left_shift, self.rect.top), (50, self.rect.height))
+        def ai(self):
+            if self.alive and player.alive:
+                if self.direction == 1:
+                    ai_moving_right = True
+                else:
+                    ai_moving_left = False
+                ai_moving_left = not ai_moving_right
+                self.move(ai_moving_left, ai_moving_right)
+
 
     def update_animation(self):
         if not isinstance(self.action, str):
@@ -197,7 +190,7 @@ class Hero(pygame.sprite.Sprite):
             self.update_time = pygame.time.get_ticks()
 
     def check_alive(self):
-        if self.health == 0:
+        if self.health <= 0:
             self.health = 0
             self.speed = 0
             self.alive = False
@@ -224,13 +217,14 @@ class World():
                     if tile >= 0 and tile <= 21:
                         self.obstacle_list.append(tile_data)  # препятствия
                     elif tile == 22:  # create player
-                        player = Hero('player', 3, x * TILE_SIZE, y * TILE_SIZE, 5, 100)
-                    elif tile == 23:#create pig
-                        pig = Hero('pig',1,  x * TILE_SIZE, y * TILE_SIZE,5, 100)
+                        player = Hero('player', 3, x * TILE_SIZE, y * TILE_SIZE, 2, 100)
+                    elif tile == 25:#create pig
+                        pig = Hero('pig',1,  x * TILE_SIZE, (y + 0.6) * TILE_SIZE,5, 100)
+                        pig_group.add(pig)
                     elif tile == 24: #create diamonds
                         diamonds = Diamonds('Diamonds', x * TILE_SIZE, y * TILE_SIZE)
                         Diamonds_group.add(diamonds)
-                    elif tile == 25:
+                    elif tile == 23:
                         decoration = Decoration(img, x * TILE_SIZE, y * TILE_SIZE)
                         decoration_group.add(decoration)  # украшение
 
@@ -267,11 +261,10 @@ class Diamonds(pygame.sprite.Sprite):
             self.kill()
 
 
-
-pig = Hero('pig', 1, 400, 580, 5, 100)
-
 Diamonds_group = pygame.sprite.Group()
 decoration_group = pygame.sprite.Group()
+pig_group = pygame.sprite.Group()
+
 
 
 
@@ -341,11 +334,15 @@ while run:
         world.draw()
         player.update_animation()
 
+
+        # update and draw player
         player.update()
         player.draw()
 
-        pig.update()
-        pig.draw()
+        # update and draw pigs
+        for pig in pig_group:
+            pig.update()
+            pig.draw()
 
         Diamonds_group.update()
         decoration_group.update()
