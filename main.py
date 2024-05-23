@@ -1,6 +1,7 @@
 import pygame
 import os
 import csv
+import random
 
 pygame.init()
 
@@ -77,6 +78,11 @@ class Hero(pygame.sprite.Sprite):
         self.image_index = 0
         self.facing_right = True
         self.attack_rect = None
+        #специальные переменные для ai
+        self.move_counter = 0
+        self.idling = False
+        self.idling_counter = 0
+
 
         animation_types = ['idle', 'run', 'jump', 'fall', 'attack', 'die']
         for animation in animation_types:
@@ -107,6 +113,15 @@ class Hero(pygame.sprite.Sprite):
                 if player.health <= 0:
                     player.alive = False
                     print("Player has died")
+                else:
+                    # Определение направления столкновения
+                    if self.rect.x < player.rect.x:
+                        # Столкновение справа, игрок двигается влево
+                        player.rect.x += 30
+                    else:
+                        # Столкновение слева, игрок двигается вправо
+                        player.rect.x -= 30
+
                 self.last_hit_time = pygame.time.get_ticks()
 
 
@@ -157,14 +172,31 @@ class Hero(pygame.sprite.Sprite):
         self.rect.x += dx
         self.rect.y += dy
 
-        def ai(self):
-            if self.alive and player.alive:
+    def ai(self):
+        if self.alive and player.alive:
+            if self.idling == False and random.randint(1, 200) == 1:
+                self.update_action('idle')
+                self.idling = True
+                self.idling_counter = 50
+
+            if self.idling == False:
                 if self.direction == 1:
                     ai_moving_right = True
                 else:
-                    ai_moving_left = False
+                    ai_moving_right = False
                 ai_moving_left = not ai_moving_right
                 self.move(ai_moving_left, ai_moving_right)
+                self.update_action('run')
+                self.move_counter += 1
+
+                if self.move_counter > TILE_SIZE:
+                    self.direction *= -1
+                    self.move_counter *= -1
+            else:
+                self.idling_counter -= 1
+                if self.idling_counter <= 0:
+                    self.idling = False
+
 
 
     def update_animation(self):
@@ -196,6 +228,8 @@ class Hero(pygame.sprite.Sprite):
             self.alive = False
             self.update_action('die')
 
+
+
     def draw(self):
         screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
 
@@ -217,9 +251,9 @@ class World():
                     if tile >= 0 and tile <= 21:
                         self.obstacle_list.append(tile_data)  # препятствия
                     elif tile == 22:  # create player
-                        player = Hero('player', 3, x * TILE_SIZE, y * TILE_SIZE, 2, 100)
+                        player = Hero('player', 3, x * TILE_SIZE, y * TILE_SIZE, 5, 100)
                     elif tile == 25:#create pig
-                        pig = Hero('pig',1,  x * TILE_SIZE, (y + 0.6) * TILE_SIZE,5, 100)
+                        pig = Hero('pig',1,  x * TILE_SIZE, (y + 0.6) * TILE_SIZE,3, 100)
                         pig_group.add(pig)
                     elif tile == 24: #create diamonds
                         diamonds = Diamonds('Diamonds', x * TILE_SIZE, y * TILE_SIZE)
@@ -287,6 +321,7 @@ player = world.process_data(world_data)
 run = True
 while run:
 
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             run = False
@@ -329,6 +364,7 @@ while run:
 
 
 
+
         screen.blit(background, (0, 0))
 
         world.draw()
@@ -341,6 +377,7 @@ while run:
 
         # update and draw pigs
         for pig in pig_group:
+            pig.ai()
             pig.update()
             pig.draw()
 
