@@ -15,13 +15,16 @@ clock = pygame.time.Clock()
 FPS = 60
 
 BLACK = (0, 0, 0)
+BG = (144, 201, 120)
 GRAVITY = 0.75
+SCROLL_THRESH = 200
 ROWS = 16
 COLS = 150
 TILE_SIZE = SCREEN_HEIGHT // ROWS
 TILE_TYPES = 26
 screen_scroll = 0
 bg_scroll = 0
+scroll = 0
 
 moving_left = False
 moving_right = False
@@ -37,8 +40,7 @@ for x in range(TILE_TYPES):
 
 diamonds_img = pygame.image.load('img/diamonds/25.png').convert_alpha()
 diamonds_img = pygame.transform.scale(diamonds_img, (20, 17))
-background = pygame.image.load('img/background/fon.png')
-background = pygame.transform.scale(background, (SCREEN_WIDTH, SCREEN_HEIGHT))
+background = pygame.image.load('img/background/fon.png').convert_alpha()
 heart_img = pygame.image.load('img/health_bar/2.png').convert_alpha()
 health_bar_img = pygame.image.load('img/health_bar/1.png').convert_alpha()
 health_bar_x = 10
@@ -53,6 +55,12 @@ font = pygame.font.SysFont('ARCADEPI', 30)
 def draw_text(text, font, text_col, x, y):
 	img = font.render(text, True, text_col)
 	screen.blit(img, (x, y))
+
+def draw_bg():
+	screen.fill(BG)
+	width = background.get_width()
+	for x in range(2):
+		screen.blit(background, ((x * width) - bg_scroll * 0.5, 0))
 
 
 class Hero(pygame.sprite.Sprite):
@@ -141,7 +149,7 @@ class Hero(pygame.sprite.Sprite):
             self.facing_right = True
 
         if self.jump == True and self.in_air == False:
-            self.vel_y = -9
+            self.vel_y = -12
             self.jump = False
             self.in_air = True
 
@@ -169,8 +177,22 @@ class Hero(pygame.sprite.Sprite):
                     self.in_air = False
                     dy = tile[1].top - self.rect.bottom
 
+        # check if going off the edges of the screen
+            if self.char_type == 'player':
+                if self.rect.left + dx < 0 or self.rect.right + dx > SCREEN_WIDTH:
+                    dx = 0
+
+
         self.rect.x += dx
         self.rect.y += dy
+
+        # update scroll based on player position
+        if self.char_type == 'player':
+            if self.rect.right > SCREEN_WIDTH - SCROLL_THRESH or self.rect.left < SCROLL_THRESH:
+                self.rect.x -= dx
+                screen_scroll = -dx
+
+        return screen_scroll
 
     def ai(self):
         if self.alive and player.alive:
@@ -197,7 +219,7 @@ class Hero(pygame.sprite.Sprite):
                 if self.idling_counter <= 0:
                     self.idling = False
 
-
+        self.rect.x += screen_scroll
 
     def update_animation(self):
         if not isinstance(self.action, str):
@@ -228,7 +250,17 @@ class Hero(pygame.sprite.Sprite):
             self.alive = False
             self.update_action('die')
 
-
+    def attack(self):
+        # Определяем анимацию атаки
+        self.update_action('attack')
+        # Логика атаки здесь
+        # Например, можно добавить создание прямоугольника атаки и проверку на столкновение с врагами
+        self.attack_rect = pygame.Rect(self.rect.centerx - (2 * self.rect.width * self.direction), self.rect.y, 2 * self.rect.width, self.rect.height)
+        for pig in pig_group:
+            if pig.alive and self.attack_rect.colliderect(pig.rect):
+                pig.health -= 1
+                if pig.health <= 0:
+                    pig.alive = False
 
     def draw(self):
         screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
@@ -267,15 +299,19 @@ class World():
     def draw(self):
         if self.obstacle_list:
             for tile in self.obstacle_list:
+                tile[1][0] += screen_scroll
                 screen.blit(tile[0], tile[1])
 
 
 class Decoration(pygame.sprite.Sprite):
-	def __init__(self, img, x, y):
-		pygame.sprite.Sprite.__init__(self)
-		self.image = img
-		self.rect = self.image.get_rect()
-		self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
+
+    def update(self):
+        self.rect.x += screen_scroll
 
 class Diamonds(pygame.sprite.Sprite):
     def __init__(self, item_type, x, y):
@@ -288,6 +324,7 @@ class Diamonds(pygame.sprite.Sprite):
 
 
     def update(self):
+        self.rect.x += screen_scroll
         #проверка, взял ли игрок бриллиант
         if pygame.sprite.collide_rect(self, player):
             if self.item_type == 'Diamonds':
@@ -356,20 +393,15 @@ while run:
             player.update_action('run')
         else:
             player.update_action('idle')
+        screen_scroll = player.move(moving_left, moving_right)
+        bg_scroll -= screen_scroll
 
         if player.jump and player.vel_y == 0:
             player.update_action('jump')
-        elif player.rect.bottom < 300:
-            player.update_action('fall')
 
-
-
-
-        screen.blit(background, (0, 0))
-
+        draw_bg()
         world.draw()
         player.update_animation()
-
 
         # update and draw player
         player.update()
@@ -396,7 +428,6 @@ while run:
 
         pygame.display.update()
         clock.tick(FPS)
-
 
 pygame.quit()
 
