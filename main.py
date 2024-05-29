@@ -2,6 +2,7 @@ import pygame
 import os
 import csv
 import random
+import button
 
 pygame.init()
 
@@ -15,7 +16,8 @@ clock = pygame.time.Clock()
 FPS = 60
 
 BLACK = (0, 0, 0)
-BG = (144, 201, 120)
+WHITE = (250, 250, 250)
+BG = (63, 56, 81)
 GRAVITY = 0.75
 SCROLL_THRESH = 200
 ROWS = 16
@@ -25,6 +27,7 @@ TILE_TYPES = 27
 screen_scroll = 0
 bg_scroll = 0
 scroll = 0
+start_game = False
 
 moving_left = False
 moving_right = False
@@ -38,6 +41,9 @@ for x in range(TILE_TYPES):
     img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
     img_list.append(img)
 
+start_img = pygame.image.load('img/start_btn.png').convert_alpha()
+exit_img = pygame.image.load('img/exit_btn.png').convert_alpha()
+restart_img = pygame.image.load('img/restart_btn.png').convert_alpha()
 diamonds_img = pygame.image.load('img/diamonds/25.png').convert_alpha()
 diamonds_img = pygame.transform.scale(diamonds_img, (20, 17))
 background = pygame.image.load('img/background/fon.png').convert_alpha()
@@ -50,7 +56,8 @@ bar_x = 10
 bar_y = 5
 
 
-font = pygame.font.SysFont('ARCADEPI', 30)
+font = pygame.font.SysFont('PixelifySans-Medium.ttf', 30)
+font1 = pygame.font.SysFont('PixelifySans-Medium.ttf', 90)
 
 def draw_text(text, font, text_col, x, y):
 	img = font.render(text, True, text_col)
@@ -61,6 +68,20 @@ def draw_bg():
 	width = background.get_width()
 	for x in range(4):
 		screen.blit(background, ((x * width) - bg_scroll * 0.5, 0))
+
+def reset_level():
+    pig_group.empty()
+    decoration_group.empty()
+    exit_group.empty()
+    Diamonds_group.empty()
+
+    # создать пустой список плиток
+    data = []
+    for row in range(ROWS):
+        r = [-1] * COLS
+        data.append(r)
+
+    return data
 
 
 class Hero(pygame.sprite.Sprite):
@@ -92,7 +113,7 @@ class Hero(pygame.sprite.Sprite):
         self.idling_counter = 0
 
 
-        animation_types = ['idle', 'run', 'jump', 'fall', 'attack', 'die']
+        animation_types = ['idle', 'run', 'jump', 'fall', 'attack', 'die', 'hit']
         for animation in animation_types:
             temp_list = []
             num_of_frames = len(os.listdir(f'img/{self.char_type}/{animation}'))
@@ -121,11 +142,10 @@ class Hero(pygame.sprite.Sprite):
             # Проверка столкновения с игроком
         if self.char_type == 'pig' and pygame.sprite.collide_rect(self, player):
             if player.alive and pygame.time.get_ticks() - self.last_hit_time > 1000:  # Проверка прошедшего времени
+                player.update_action('hit')
                 player.health -= 1  # Теряется одна жизнь
-                print("Player health:", player.health)
                 if player.health <= 0:
                     player.alive = False
-                    print("Player has died")
                 else:
                     # Определение направления столкновения
                     if self.rect.x < player.rect.x:
@@ -169,7 +189,7 @@ class Hero(pygame.sprite.Sprite):
             # проверка препятсвий в направлении х
             if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                 dx = 0
-                if self.char_type == 'enemy':
+                if self.char_type == 'pig':
                     self.direction *= -1
                     self.move_counter = 0
             # проверка препятсвий в направлении y
@@ -184,6 +204,15 @@ class Hero(pygame.sprite.Sprite):
                     self.vel_y = 0
                     self.in_air = False
                     dy = tile[1].top - self.rect.bottom
+
+            # check for collision with exit
+            level_complete = False
+            if pygame.sprite.spritecollide(self, exit_group, False):
+                level_complete = True
+
+            # check if fallen off the map
+            if self.rect.bottom > SCREEN_HEIGHT:
+                self.health = 0
 
         # check if going off the edges of the screen
             if self.char_type == 'player':
@@ -201,7 +230,7 @@ class Hero(pygame.sprite.Sprite):
                 self.rect.x -= dx
                 screen_scroll = -dx
 
-        return screen_scroll
+        return screen_scroll, level_complete
 
     def ai(self):
         if self.alive and player.alive:
@@ -342,14 +371,14 @@ class Diamonds(pygame.sprite.Sprite):
                 player.diamonds += 1
             self.kill()
 
+start_button = button.Button(SCREEN_WIDTH // 2 - 130, SCREEN_HEIGHT // 2 - 150, start_img, 1)
+exit_button = button.Button(SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 + 50, exit_img, 1)
+restart_button = button.Button(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 50, restart_img, 2)
 
 Diamonds_group = pygame.sprite.Group()
 decoration_group = pygame.sprite.Group()
 pig_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
-
-
-
 
 # создать пустой список плиток
 world_data = []
@@ -366,56 +395,85 @@ with open(f'Level0_data.csv', newline='') as csvfile:
 
 world = World()
 player = world.process_data(world_data)
-#camera = Camera(COLS * TILE_SIZE, SCREEN_HEIGHT)
 
 run = True
 while run:
 
     clock.tick(FPS)
 
-    # update background
-    draw_bg()
-    # draw world map
-    world.draw()
+    if start_game == False:
+        # draw menu
+        screen.fill(BG)
+
+        # add buttons
+        if start_button.draw(screen):
+            start_game = True
+        if exit_button.draw(screen):
+            run = False
+    else:
+
+        # update background
+        draw_bg()
+        # draw world map
+        world.draw()
 
 
-    player.update()
-    player.draw()
+        player.update()
+        player.draw()
 
-    # update and draw pigs
-    for pig in pig_group:
-        pig.ai()
-        pig.update()
-        pig.draw()
+        # update and draw pigs
+        for pig in pig_group:
+            pig.ai()
+            pig.update()
+            pig.draw()
 
-    # update and draw groups
-    Diamonds_group.update()
-    decoration_group.update()
-    exit_group.update()
-    decoration_group.draw(screen)
-    Diamonds_group.draw(screen)
-    player.move(moving_left, moving_right)
-    exit_group.draw(screen)
+        # update and draw groups
+        Diamonds_group.update()
+        decoration_group.update()
+        exit_group.update()
+        decoration_group.draw(screen)
+        Diamonds_group.draw(screen)
+        player.move(moving_left, moving_right)
+        exit_group.draw(screen)
 
-    screen.blit(health_bar_img, (health_bar_x, health_bar_y))
-    draw_text(f'{player.diamonds}', font, BLACK, 80, 90)
+        screen.blit(health_bar_img, (health_bar_x, health_bar_y))
+        draw_text(f'{player.diamonds}', font, BLACK, 80, 90)
 
-    screen.blit(bar_img, (bar_x, bar_y))
-    for x in range(player.health):
-        screen.blit(heart_img, (46 + (x * 22), 32))
+        screen.blit(bar_img, (bar_x, bar_y))
+        for x in range(player.health):
+            screen.blit(heart_img, (46 + (x * 22), 32))
 
-    # update player actions
-    if player.alive:
-        if player.in_air:
-            player.update_action('jump')
-        elif moving_left or moving_right:
-            player.update_action('run')
+        # update player actions
+        if player.alive:
+            if player.in_air:
+                player.update_action('jump')
+            elif moving_left or moving_right:
+                player.update_action('run')
+            else:
+                player.update_action('idle')
+            screen_scroll, level_complete = player.move(moving_left, moving_right)
+            bg_scroll -= screen_scroll
+            #проверка, завершил ли игрок уровень
+            if level_complete:
+                screen_scroll = 0
+                pygame.draw.rect(screen, WHITE, (SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 - 50, SCREEN_WIDTH - 265, SCREEN_HEIGHT // 2 - 225))
+                pygame.draw.rect(screen, BLACK, (SCREEN_WIDTH // 2 - 240, SCREEN_HEIGHT // 2 - 40, SCREEN_WIDTH - 285, SCREEN_HEIGHT // 2 - 245))
+                draw_text('ВЫ ВЫИГРАЛИ!', font1, WHITE, SCREEN_WIDTH // 2 - 230, SCREEN_HEIGHT // 2 - 30)
         else:
-            player.update_action('idle')
-        screen_scroll = player.move(moving_left, moving_right)
-        bg_scroll -= screen_scroll
+            screen_scroll = 0
+            if restart_button.draw(screen):
+                bg_scroll = 0
+                world_data = reset_level()
+                with open(f'Level0_data.csv', newline='') as csvfile:
+                    reader = csv.reader(csvfile, delimiter=',')
+                    for x, row in enumerate(reader):
+                        for y, tile in enumerate(row):
+                            world_data[x][y] = int(tile)
+                world = World()
+                player = world.process_data(world_data)
 
-        player.update_animation()
+
+            player.update_animation()
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
