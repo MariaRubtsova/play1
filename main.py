@@ -33,7 +33,6 @@ moving_left = False
 moving_right = False
 moving_down = False
 
-
 # хранить плитки в списке
 img_list = []
 for x in range(TILE_TYPES):
@@ -55,19 +54,21 @@ bar_img = pygame.image.load('img/health_bar/3.png').convert_alpha()
 bar_x = 10
 bar_y = 5
 
-
 font = pygame.font.SysFont('PixelifySans-Medium.ttf', 30)
 font1 = pygame.font.SysFont('PixelifySans-Medium.ttf', 90)
 
+
 def draw_text(text, font, text_col, x, y):
-	img = font.render(text, True, text_col)
-	screen.blit(img, (x, y))
+    img = font.render(text, True, text_col)
+    screen.blit(img, (x, y))
+
 
 def draw_bg():
-	screen.fill(BG)
-	width = background.get_width()
-	for x in range(4):
-		screen.blit(background, ((x * width) - bg_scroll * 0.5, 0))
+    screen.fill(BG)
+    width = background.get_width()
+    for x in range(4):
+        screen.blit(background, ((x * width) - bg_scroll * 0.5, 0))
+
 
 def reset_level():
     pig_group.empty()
@@ -106,12 +107,15 @@ class Hero(pygame.sprite.Sprite):
         self.status = None
         self.image_index = 0
         self.facing_right = True
-        self.attacking = False
-        #специальные переменные для ai
+        self.attack_fm = 0
+        self.last_attack_time = 0
+        self.attack_delay = 2000  # Время задержки после атаки (в миллисекундах)
+        # специальные переменные для ai
         self.move_counter = 0
         self.idling = False
         self.idling_counter = 0
 
+        self.atttaakkk_fm = 0
 
         animation_types = ['idle', 'run', 'jump', 'fall', 'attack', 'die', 'hit']
         for animation in animation_types:
@@ -130,33 +134,39 @@ class Hero(pygame.sprite.Sprite):
         self.height = self.image.get_height()
         self.terrain_collision_rect = pygame.Rect((self.rect.left + 24, self.rect.top), (50, self.rect.height))
 
+    def update(self):
+        self.update_animation()
+        self.check_alive()
 
+            # Проверка столкновения с игроком
 
     def update(self):
         self.update_animation()
         self.check_alive()
-        # reset status attack
-        if self.attacking and pygame.time.get_ticks() - self.update_time > self.animation_list['attack'].get_duration():
-            self.attacking = False
 
-            # Проверка столкновения с игроком
-        if self.char_type == 'pig' and pygame.sprite.collide_rect(self, player):
-            if player.alive and pygame.time.get_ticks() - self.last_hit_time > 1000:  # Проверка прошедшего времени
-                player.update_action('hit')
-                player.health -= 1  # Теряется одна жизнь
-                if player.health <= 0:
-                    player.alive = False
-                else:
-                    # Определение направления столкновения
-                    if self.rect.x < player.rect.x:
-                        # Столкновение справа, игрок двигается влево
-                        player.rect.x += 30
+        if self.char_type == 'pig' and pygame.sprite.collide_rect(self, player) and pygame.sprite.collide_rect_ratio(0.8)(self, player):
+            if player.alive and pygame.time.get_ticks() - self.last_hit_time > 1000:
+                if self.action != 'die':  # Добавляем проверку на состояние анимации смерти
+                    if player.action == 'attack':  # Проверяем, активна ли анимация атаки у игрока
+                        player.attack()  # Вызываем метод атаки, чтобы игрок мог атаковать свинью
+                        self.health -= 1  # Снижаем здоровье свиньи
                     else:
-                        # Столкновение слева, игрок двигается вправо
-                        player.rect.x -= 30
+                        player.update_action('hit')
+                        player.health -= 1
+                        if player.health <= 0:
+                            player.alive = False
+                        else:
+                            if self.rect.x < player.rect.x:
+                                player.rect.x += 30
+                            else:
+                                player.rect.x -= 30
+                    self.last_hit_time = pygame.time.get_ticks()
 
-                self.last_hit_time = pygame.time.get_ticks()
-
+        if self.health <= 0:
+            self.health = 0
+            self.speed = 0
+            self.alive = False
+            self.update_action('die')
 
     def move(self, moving_left, moving_right):
         screen_scroll = 0
@@ -214,18 +224,18 @@ class Hero(pygame.sprite.Sprite):
             if self.rect.bottom > SCREEN_HEIGHT:
                 self.health = 0
 
-        # check if going off the edges of the screen
+            # check if going off the edges of the screen
             if self.char_type == 'player':
                 if self.rect.left + dx < 0 or self.rect.right + dx > SCREEN_WIDTH:
                     dx = 0
-
 
         self.rect.x += dx
         self.rect.y += dy
 
         # update scroll based on player position
         if self.char_type == 'player':
-            if (self.rect.right > SCREEN_WIDTH - SCROLL_THRESH and bg_scroll < (world.level_length * TILE_SIZE) - SCREEN_WIDTH)\
+            if (self.rect.right > SCREEN_WIDTH - SCROLL_THRESH and bg_scroll < (
+                    world.level_length * TILE_SIZE) - SCREEN_WIDTH) \
                     or (self.rect.left < SCROLL_THRESH and bg_scroll > abs(dx)):
                 self.rect.x -= dx
                 screen_scroll = -dx
@@ -259,6 +269,19 @@ class Hero(pygame.sprite.Sprite):
 
         self.rect.x += screen_scroll
 
+    def attack(self):
+        f = self.attack_fm < 2
+        self.attack_fm += 0.3
+        self.image = self.animation_list['attack'][min(int(self.attack_fm), 1)]
+        if (not f): self.attack_fm = 0
+
+        # Проверка столкновения с каждой свиньей только если анимация атаки не активна
+        if self.char_type == 'player' and not f:
+            for pig in pig_group:
+                if pygame.sprite.collide_rect(self, pig) and pygame.sprite.collide_rect_ratio(0.8)(self, pig):
+                    pig.health -= 1  # Сокращенное условие столкновения
+        return f
+
     def update_animation(self):
         # update animation
         ANIMATION_COOLDOWN = 100
@@ -275,6 +298,7 @@ class Hero(pygame.sprite.Sprite):
             else:
                 self.frame_index = 0
 
+
     def update_action(self, new_action):
         if new_action != self.action:
             self.action = new_action
@@ -288,9 +312,16 @@ class Hero(pygame.sprite.Sprite):
             self.alive = False
             self.update_action('die')
 
-
     def draw(self):
-        screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
+        if start_game:  # Добавлена проверка, чтобы герой прорисовывался только в игровом режиме
+            if (self.image in self.animation_list['attack']):
+                self.rect.x += 18 if self.direction == 1 else -55
+                self.rect.y -= 30
+                screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
+                self.rect.x -= 18 if self.direction == 1 else -55
+                self.rect.y += 30
+            else:
+                screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
 
 
 class World():
@@ -312,10 +343,10 @@ class World():
                         self.obstacle_list.append(tile_data)  # препятствия
                     elif tile == 22:  # create player
                         player = Hero('player', 3, x * TILE_SIZE, y * TILE_SIZE, 5, 100)
-                    elif tile == 25:#create pig
-                        pig = Hero('pig',1,  x * TILE_SIZE, (y + 0.6) * TILE_SIZE,3, 100)
+                    elif tile == 25:  # create pig
+                        pig = Hero('pig', 1, x * TILE_SIZE, (y + 0.6) * TILE_SIZE, 3, 100)
                         pig_group.add(pig)
-                    elif tile == 24: #create diamonds
+                    elif tile == 24:  # create diamonds
                         diamonds = Diamonds('Diamonds', x * TILE_SIZE, y * TILE_SIZE)
                         Diamonds_group.add(diamonds)
                     elif tile == 23:
@@ -333,15 +364,17 @@ class World():
                 tile[1][0] += screen_scroll
                 screen.blit(tile[0], tile[1])
 
-class Exit(pygame.sprite.Sprite):
-	def __init__(self, img, x, y):
-		pygame.sprite.Sprite.__init__(self)
-		self.image = img
-		self.rect = self.image.get_rect()
-		self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
 
-	def update(self):
-		self.rect.x += screen_scroll
+class Exit(pygame.sprite.Sprite):
+    def __init__(self, img, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = img
+        self.rect = self.image.get_rect()
+        self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()))
+
+    def update(self):
+        self.rect.x += screen_scroll
+
 
 class Decoration(pygame.sprite.Sprite):
     def __init__(self, img, x, y):
@@ -353,6 +386,7 @@ class Decoration(pygame.sprite.Sprite):
     def update(self):
         self.rect.x += screen_scroll
 
+
 class Diamonds(pygame.sprite.Sprite):
     def __init__(self, item_type, x, y):
         pygame.sprite.Sprite.__init__(self)
@@ -360,16 +394,16 @@ class Diamonds(pygame.sprite.Sprite):
         if self.item_type == 'Diamonds':
             self.image = diamonds_img
         self.rect = self.image.get_rect()
-        self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height()*1.5))
-
+        self.rect.midtop = (x + TILE_SIZE // 2, y + (TILE_SIZE - self.image.get_height() * 1.5))
 
     def update(self):
         self.rect.x += screen_scroll
-        #проверка, взял ли игрок бриллиант
+        # проверка, взял ли игрок бриллиант
         if pygame.sprite.collide_rect(self, player):
             if self.item_type == 'Diamonds':
                 player.diamonds += 1
             self.kill()
+
 
 start_button = button.Button(SCREEN_WIDTH // 2 - 130, SCREEN_HEIGHT // 2 - 150, start_img, 1)
 exit_button = button.Button(SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 + 50, exit_img, 1)
@@ -397,10 +431,11 @@ world = World()
 player = world.process_data(world_data)
 
 run = True
+
+
+ffffffff = False
 while run:
-
     clock.tick(FPS)
-
     if start_game == False:
         # draw menu
         screen.fill(BG)
@@ -417,9 +452,8 @@ while run:
         # draw world map
         world.draw()
 
-
         player.update()
-        player.draw()
+        #player.draw()
 
         # update and draw pigs
         for pig in pig_group:
@@ -453,11 +487,13 @@ while run:
                 player.update_action('idle')
             screen_scroll, level_complete = player.move(moving_left, moving_right)
             bg_scroll -= screen_scroll
-            #проверка, завершил ли игрок уровень
+            # проверка, завершил ли игрок уровень
             if level_complete:
                 screen_scroll = 0
-                pygame.draw.rect(screen, WHITE, (SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 - 50, SCREEN_WIDTH - 265, SCREEN_HEIGHT // 2 - 225))
-                pygame.draw.rect(screen, BLACK, (SCREEN_WIDTH // 2 - 240, SCREEN_HEIGHT // 2 - 40, SCREEN_WIDTH - 285, SCREEN_HEIGHT // 2 - 245))
+                pygame.draw.rect(screen, WHITE, (
+                SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 - 50, SCREEN_WIDTH - 265, SCREEN_HEIGHT // 2 - 225))
+                pygame.draw.rect(screen, BLACK, (
+                SCREEN_WIDTH // 2 - 240, SCREEN_HEIGHT // 2 - 40, SCREEN_WIDTH - 285, SCREEN_HEIGHT // 2 - 245))
                 draw_text('ВЫ ВЫИГРАЛИ!', font1, WHITE, SCREEN_WIDTH // 2 - 230, SCREEN_HEIGHT // 2 - 30)
         else:
             screen_scroll = 0
@@ -472,8 +508,8 @@ while run:
                 world = World()
                 player = world.process_data(world_data)
 
-
             player.update_animation()
+
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -500,8 +536,11 @@ while run:
                 moving_down = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
-                5
+                ffffffff = True
 
+    if ffffffff: ffffffff = player.attack()
+
+    player.draw()
     pygame.display.update()
 
 pygame.quit()
