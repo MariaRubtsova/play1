@@ -1,7 +1,8 @@
-import pygame
-import os
 import csv
+import math
+import os
 import random
+import pygame
 import button
 
 pygame.init()
@@ -138,7 +139,7 @@ class Hero(pygame.sprite.Sprite):
         self.update_animation()
         self.check_alive()
 
-            # Проверка столкновения с игроком
+        # Проверка столкновения с игроком
 
     def update(self):
         self.update_animation()
@@ -273,13 +274,22 @@ class Hero(pygame.sprite.Sprite):
         f = self.attack_fm < 2
         self.attack_fm += 0.3
         self.image = self.animation_list['attack'][min(int(self.attack_fm), 1)]
-        if (not f): self.attack_fm = 0
+        if (not f):
+            self.attack_fm = 0
 
         # Проверка столкновения с каждой свиньей только если анимация атаки не активна
         if self.char_type == 'player' and not f:
             for pig in pig_group:
-                if pygame.sprite.collide_rect(self, pig) and pygame.sprite.collide_rect_ratio(0.8)(self, pig):
-                    pig.health -= 1  # Сокращенное условие столкновения
+                # Вычисляем расстояние между центрами игрока и свиньи
+                distance = math.sqrt((self.rect.centerx - pig.rect.centerx)**2 +
+                                     (self.rect.centery - pig.rect.centery)**2)
+                # Радиус столкновения для игрока и свиньи (можно настроить)
+                player_radius = self.rect.width * 0.9
+                pig_radius = pig.rect.width * 0.5
+
+                # Проверяем, меньше ли расстояние суммы радиусов
+                if distance < player_radius + pig_radius:
+                    pig.health -= 1
         return f
 
     def update_animation(self):
@@ -297,7 +307,6 @@ class Hero(pygame.sprite.Sprite):
                 self.frame_index = len(self.animation_list[self.action]) - 1
             else:
                 self.frame_index = 0
-
 
     def update_action(self, new_action):
         if new_action != self.action:
@@ -433,7 +442,7 @@ player = world.process_data(world_data)
 run = True
 
 
-ffffffff = False
+ff = False
 while run:
     clock.tick(FPS)
     if start_game == False:
@@ -453,7 +462,10 @@ while run:
         world.draw()
 
         player.update()
-        #player.draw()
+        if ff:
+            ff = player.attack()
+
+        player.draw()
 
         # update and draw pigs
         for pig in pig_group:
@@ -490,11 +502,10 @@ while run:
             # проверка, завершил ли игрок уровень
             if level_complete:
                 screen_scroll = 0
-                pygame.draw.rect(screen, WHITE, (
-                SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 - 50, SCREEN_WIDTH - 265, SCREEN_HEIGHT // 2 - 225))
-                pygame.draw.rect(screen, BLACK, (
-                SCREEN_WIDTH // 2 - 240, SCREEN_HEIGHT // 2 - 40, SCREEN_WIDTH - 285, SCREEN_HEIGHT // 2 - 245))
-                draw_text('ВЫ ВЫИГРАЛИ!', font1, WHITE, SCREEN_WIDTH // 2 - 230, SCREEN_HEIGHT // 2 - 30)
+                pygame.draw.rect(screen, WHITE, (SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 - 35, SCREEN_WIDTH - 265, SCREEN_HEIGHT // 2 - 225))
+                pygame.draw.rect(screen, BLACK, (SCREEN_WIDTH // 2 - 240, SCREEN_HEIGHT // 2 - 25, SCREEN_WIDTH - 285, SCREEN_HEIGHT // 2 - 245))
+                draw_text('ВЫ ВЫИГРАЛИ!', font1, WHITE, SCREEN_WIDTH // 2 - 230, SCREEN_HEIGHT // 2 - 15)
+
         else:
             screen_scroll = 0
             if restart_button.draw(screen):
@@ -536,9 +547,10 @@ while run:
                 moving_down = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
-                ffffffff = True
+                ff = True
 
-    if ffffffff: ffffffff = player.attack()
+    if ff:
+        ff = player.attack()
 
     player.draw()
     pygame.display.update()
